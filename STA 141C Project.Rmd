@@ -1,0 +1,412 @@
+---
+title: "STA 141C Project"
+author: "Martin Topacio"
+date: "2024-02-28"
+output: html_document
+---
+
+Read in data, libraries
+```{r, echo=FALSE}
+# reading in the dataset
+data = read.csv("C:/Users/19162/Downloads/stats (2).csv")
+
+# load needed libraries
+library(dplyr)
+library(ggplot2)
+library(caret)
+
+```
+
+Predictor variables defined 
+```{r, echo=FALSE}
+# Load required libraries
+library(dplyr)
+
+# Define X (predictor) and Y (response) variables
+X <- data[, c(-11)]  # Independent variables
+Y <- data$home_run  # Dependent variable
+```
+
+Make training and test sets
+```{r, echo=FALSE}
+library(dplyr)
+
+trainingSet = data %>% filter(year <= 2019)
+testSet = data %>% filter(year > 2019)
+
+testX = testSet[, -11]
+testY = testSet$home_run
+
+lm(home_run ~ ., data=trainingSet)
+```
+
+
+Removing unnecessary columns from the dataset
+```{r, echo=FALSE}
+columns_to_remove = c("ab", "triple", "last_name..first_name", "player_id", "k_percent", "bb_percent", "batting_avg", "pa", "on_base_percent", "year")
+
+training_set_modified = select(trainingSet, -one_of(columns_to_remove))
+
+test_set_modified = select(testSet, -one_of(columns_to_remove))
+
+str(training_set_modified)
+str(test_set_modified)
+```
+
+
+Linear Regression model
+```{r, echo=FALSE}
+testX = test_set_modified
+testY = testSet$home_run
+
+trainingSet2 = training_set_modified[, c(-1,-2)]
+lin.model = lm(training_set_modified$home_run ~ ., data = training_set_modified)
+
+summary(lin.model)
+
+predictions = predict(lin.model, newdata = testX)
+
+if (any(is.na(predictions))) {
+  print("Predictions contain NA values. Please check model and data.")
+} else if (length(unique(testY)) <= 1) {
+  print("Response variable has zero or minimal variability in the test set. Please check the data.")
+} else {
+  mse = mean((testY - predictions)^2, na.rm = TRUE)
+  print(paste("MSE:", mse))
+}
+
+aic.value = AIC(lin.model)
+bic.value = BIC(lin.model)
+
+n = nrow(training_set_modified)
+p = length(coef(lin.model))
+Cp_statistic = (1/n) * (sum((residuals(lin.model)^2) / (sigma(lin.model)^2)) + 2*p - 2)
+
+print(paste("AIC:", aic.value))
+print(paste("BIC:", bic.value))
+print(paste("Cp statistic:", Cp_statistic))
+```
+
+Ridge Regression model
+```{r, echo=FALSE}
+# Load required libraries
+library(glmnet)
+
+# Define X (predictor) and Y (response) variables
+X <- model.matrix(~ . - home_run, data = training_set_modified)
+Y <- training_set_modified$home_run
+
+# Fit ridge regression model
+ridge_model <- glmnet(X, Y, alpha = 0, lambda = 0.1)  # Alpha = 0 for ridge regression, lambda = 0.1 (can be tuned)
+
+# Make predictions using ridge regression model on test set
+testX <- model.matrix(~ . - home_run, data = test_set_modified)  # Independent variables for test set
+ridge_predictions <- predict(ridge_model, newx = testX)
+
+# Evaluate predictions
+mse_ridge <- mean((testY - ridge_predictions)^2, na.rm = TRUE)
+print(paste("MSE (Ridge Regression):", mse_ridge))
+
+# Extract coefficients from ridge regression model
+coef_ridge <- coef(ridge_model)
+
+# Predict response variable using ridge coefficients
+ridge_predictions <- predict(ridge_model, newx = testX)
+
+# Mean Squared Error (MSE)
+mse_ridge <- mean((testY - ridge_predictions)^2, na.rm = TRUE)
+print(paste("MSE (Ridge Regression):", mse_ridge))
+
+# Number of observations
+n <- nrow(training_set_modified)
+
+# Number of predictors (excluding intercept)
+p <- sum(coef_ridge != 0)
+
+# Degrees of freedom
+df <- n - p - 1
+
+# Akaike Information Criterion (AIC)
+aic_ridge <- n * log(mse_ridge) + 2 * (p + 1)
+print(paste("AIC (Ridge Regression):", aic_ridge))
+
+# Bayesian Information Criterion (BIC)
+bic_ridge <- n * log(mse_ridge) + log(n) * (p + 1)
+print(paste("BIC (Ridge Regression):", bic_ridge))
+
+# Cp statistic
+Cp_ridge <- (1/n) * (sum((testY - ridge_predictions)^2) + 2 * p * mse_ridge)
+print(paste("Cp statistic (Ridge Regression):", Cp_ridge))
+```
+
+```{r, echo=FALSE}
+summary(ridge_model)
+```
+
+
+
+LASSO regression model
+```{r, echo=FALSE}
+# Load required libraries
+library(glmnet)
+
+# Define X (predictor) and Y (response) variables
+X <- model.matrix(~ . - home_run, data = training_set_modified)  # Independent variables
+Y <- training_set_modified$home_run  # Dependent variable
+
+# Fit LASSO regression model
+lasso_model <- glmnet(X, Y, alpha = 1)  # Alpha = 1 for LASSO regression
+
+# Make predictions using LASSO regression model on test set
+testX <- model.matrix(~ . - home_run, data = test_set_modified)  # Independent variables for test set
+lasso_predictions <- predict(lasso_model, newx = testX)
+
+summary(lasso_model)
+
+```
+```{r, echo=FALSE}
+# Extract coefficients from LASSO regression model
+coef_lasso <- coef(lasso_model)
+
+# Predict response variable using LASSO coefficients
+lasso_predictions <- predict(lasso_model, newx = testX)
+
+# Mean Squared Error (MSE)
+mse_lasso <- mean((testY - lasso_predictions)^2, na.rm = TRUE)
+print(paste("MSE (LASSO Regression):", mse_lasso))
+
+# Number of observations
+n <- nrow(training_set_modified)
+
+# Number of predictors (excluding intercept)
+p <- sum(coef_lasso != 0)
+
+# Degrees of freedom
+df <- n - p - 1
+
+# Akaike Information Criterion (AIC)
+aic_lasso <- n * log(mse_lasso) + 2 * (p + 1)
+print(paste("AIC (LASSO Regression):", aic_lasso))
+
+# Bayesian Information Criterion (BIC)
+bic_lasso <- n * log(mse_lasso) + log(n) * (p + 1)
+print(paste("BIC (LASSO Regression):", bic_lasso))
+
+# Cp statistic
+Cp_lasso <- (1/n) * (sum((testY - lasso_predictions)^2) + 2 * p * mse_lasso)
+print(paste("Cp statistic (LASSO Regression):", Cp_lasso))
+
+```
+
+K-fold cross-validation on Ridge regression
+```{r}
+# Define the range of hyperparameters to test
+alpha_seq <- seq(0, 1, by = 0.1)  # For Ridge regression (alpha = 0)
+lambda_seq <- 10^seq(-2, 2, length.out = 100)  # For LASSO regression
+
+# Define the number of folds for cross-validation
+k <- 5  # You can adjust this value as needed
+
+# Perform k-fold cross-validation for Ridge regression
+ridge_cv <- cv.glmnet(X, Y, alpha = 0, lambda = lambda_seq, nfolds = k)
+
+# Get the optimal lambda values
+optimal_lambda_ridge <- ridge_cv$lambda.min
+
+# Retrain the models with the optimal parameters using the entire dataset
+ridge_model <- glmnet(X, Y, alpha = 0, lambda = optimal_lambda_ridge)
+
+optimal_lambda_ridge
+```
+
+
+K-fold validation cross-validation on LASSO regression
+```{r}
+# Define the range of hyperparameters to test
+alpha_seq <- seq(0, 1, by = 0.1)  # For Ridge regression (alpha = 0)
+lambda_seq <- 10^seq(-2, 2, length.out = 100)  # For LASSO regression
+
+# Define the number of folds for cross-validation
+k <- 5  # You can adjust this value as needed
+
+# Perform k-fold cross-validation for LASSO regression
+lasso_cv <- cv.glmnet(X, Y, alpha = 1, lambda = lambda_seq, nfolds = k)
+
+# Get the optimal lambda values
+optimal_lambda_lasso <- lasso_cv$lambda.min
+optimal_lambda_lasso
+
+# Retrain the models with the optimal parameters using the entire dataset
+lasso_model <- glmnet(X, Y, alpha = 1, lambda = optimal_lambda_lasso)
+```
+
+
+
+Whole dataset (without name, year, player id)
+```{r}
+#####
+trainingSet2 = data %>% filter(year <= 2019)
+testSet2 = data %>% filter(year > 2019)
+
+# adjust dataset
+data.adjusted <- select(data, -last_name..first_name, -player_id, -year)
+
+columns_to_remove2 = c("last_name..first_name", "player_id", "year")
+
+trainingSet2 = data.adjusted
+testSet2 = data.adjusted
+
+testX2 = testSet2[, -11]
+testY2 = testSet2$home_run
+
+training_set_modified2 = select(trainingSet2, -one_of(columns_to_remove2))
+
+test_set_modified2 = select(testSet2, -one_of(columns_to_remove2))
+
+str(training_set_modified2)
+str(test_set_modified2)
+```
+
+
+LASSO regression with modified dataset
+```{r}
+# Load required library
+library(glmnet)
+
+# Define X (predictor) and Y (response) variables
+X <- model.matrix(~ . - home_run, data = data.adjusted)  # Independent variables
+Y <- data.adjusted$home_run  # Dependent variable
+
+# Fit LASSO regression model
+lasso_model <- glmnet(X, Y, alpha = 1)  # Alpha = 1 for LASSO regression
+
+# Make predictions using LASSO regression model (you may skip this step if you don't need predictions)
+# Replace testX with your test set predictors if you want to make predictions
+testX <- model.matrix(~ . - home_run, data = test_set_modified2)  # Independent variables for test set
+lasso_predictions <- predict(lasso_model, newx = testX)
+
+# Extract coefficients from LASSO regression model
+coef_lasso <- coef(lasso_model)
+
+# Predict response variable using LASSO coefficients (you may skip this step if you don't need predictions)
+lasso_predictions <- predict(lasso_model, newx = testX)
+
+# Mean Squared Error (MSE)
+mse_lasso <- mean((testY - lasso_predictions)^2, na.rm = TRUE)
+print(paste("MSE (LASSO Regression):", mse_lasso))
+
+# Number of observations
+n <- nrow(training_set_modified2)
+
+# Number of predictors (excluding intercept)
+p <- sum(coef_lasso != 0)
+
+# Degrees of freedom
+df <- n - p - 1
+
+# Akaike Information Criterion (AIC)
+aic_lasso <- n * log(mse_lasso) + 2 * (p + 1)
+print(paste("AIC (LASSO Regression):", aic_lasso))
+
+# Bayesian Information Criterion (BIC)
+bic_lasso <- n * log(mse_lasso) + log(n) * (p + 1)
+print(paste("BIC (LASSO Regression):", bic_lasso))
+
+# Cp statistic
+Cp_lasso <- (1/n) * (sum((testY - lasso_predictions)^2) + 2 * p * mse_lasso)
+print(paste("Cp statistic (LASSO Regression):", Cp_lasso))
+
+```
+
+
+Ridge regression with modified dataset
+```{r}
+# Load required library
+library(glmnet)
+
+# Define X (predictor) and Y (response) variables
+X <- model.matrix(~ . - home_run, data = data.adjusted)  # Independent variables
+Y <- data.adjusted$home_run  # Dependent variable
+
+# Fit Ridge regression model
+ridge_model <- glmnet(X, Y, alpha = 0, lambda = 0.1)  # Alpha = 0 for Ridge regression
+
+# Extract coefficients from Ridge regression model
+coef_ridge <- coef(ridge_model)
+
+# Make predictions using Ridge regression model (you may skip this step if you don't need predictions)
+testX <- model.matrix(~ . - home_run, data = test_set_modified2)  # Independent variables for test set
+ridge_predictions <- predict(ridge_model, newx = testX)
+
+# Evaluate the model (you may skip this step if you don't need evaluation)
+# Mean Squared Error (MSE)
+mse_ridge <- mean((testY - ridge_predictions)^2, na.rm = TRUE)
+print(paste("MSE (Ridge Regression):", mse_ridge))
+
+# Number of observations
+n <- nrow(data.adjusted)
+
+# Number of predictors (excluding intercept)
+p <- sum(coef_ridge != 0)
+
+# Degrees of freedom
+df <- n - p - 1
+
+# Akaike Information Criterion (AIC)
+aic_ridge <- n * log(ridge_model$dev.ratio) + 2 * (p + 1)
+print(paste("AIC (Ridge Regression):", aic_ridge))
+
+# Bayesian Information Criterion (BIC)
+bic_ridge <- n * log(ridge_model$dev.ratio) + log(n) * (p + 1)
+print(paste("BIC (Ridge Regression):", bic_ridge))
+
+# Cp statistic
+Cp_ridge <- (1/n) * (sum((testY - ridge_predictions)^2) + 2 * p * mse_ridge)
+print(paste("Cp statistic (Ridge Regression):", Cp_ridge))
+```
+
+
+
+K-fold cross validation on modified dataset for Ridge Regression
+```{r}
+# Define the range of hyperparameters to test
+alpha_seq <- seq(0, 1, by = 0.1)  # For Ridge regression (alpha = 0)
+lambda_seq <- 10^seq(-2, 2, length.out = 100)  # For LASSO regression
+
+# Define the number of folds for cross-validation
+k <- 5  # You can adjust this value as needed
+
+# Perform k-fold cross-validation for Ridge regression
+ridge_cv <- cv.glmnet(X, Y, alpha = 0, lambda = lambda_seq, nfolds = k)
+
+# Get the optimal lambda values
+optimal_lambda_ridge <- ridge_cv$lambda.min
+optimal_lambda_ridge
+
+# Retrain the models with the optimal parameters using the entire dataset
+ridge_model <- glmnet(X, Y, alpha = 0, lambda = optimal_lambda_ridge)
+```
+
+
+K-fold cross validation on modified dataset for LASSO Regression
+```{r}
+library(glmnet)
+
+# Define the range of hyperparameters to test
+alpha_seq <- seq(0, 1, by = 0.1)  # For Ridge regression (alpha = 0)
+lambda_seq <- 10^seq(-2, 2, length.out = 100)  # For LASSO regression
+
+# Define the number of folds for cross-validation
+k <- 5  # You can adjust this value as needed
+
+# Perform k-fold cross-validation for LASSO regression
+lasso_cv <- cv.glmnet(X, Y, alpha = 1, lambda = lambda_seq, nfolds = k)
+
+# Get the optimal lambda values
+optimal_lambda_lasso <- lasso_cv$lambda.min
+optimal_lambda_lasso
+
+# Retrain the models with the optimal parameters using the entire dataset
+lasso_model <- glmnet(X, Y, alpha = 1, lambda = optimal_lambda_lasso)
+```
+
